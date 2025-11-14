@@ -16,8 +16,31 @@ const fn make_base32_alphabet() -> [u8; 32] {
     return arr;
 }
 
-fn make_byte_array(arr: &mut [u8]) {
-    println!("Byte Array: {:?}", arr);
+fn pack_base32_in_place(arr: &mut [u8]) -> &mut [u8] {
+    const BASE32_SIZE: u8 = 5;
+    const BYTE_SIZE: u8 = 8;
+
+    let mut idx: usize = 0;
+
+    let mut byte_accum = 0u16;
+    let mut bits_left = 0u8;
+
+    for i in 0..arr.len() {
+        byte_accum = byte_accum << BASE32_SIZE | arr[i] as u16;
+        bits_left += BASE32_SIZE;
+
+        // print!("{:08b} ", arr[i]);
+
+        while bits_left >= BYTE_SIZE {
+            let byte: u8 = (byte_accum >> (bits_left - BYTE_SIZE)) as u8;
+            // println!("=> {:08b} ", byte);
+            (*arr)[idx] = byte;
+            idx += 1;
+            bits_left -= BYTE_SIZE;
+        }
+    }
+
+    &mut arr[0..idx]
 }
 
 fn read_secret_from_file(path: &str) -> String {
@@ -49,8 +72,11 @@ fn main() {
             "Received Secret: {}, Offset: {}, Len: {}",
             _tmp, offset, len
         );
+        assert_ne!(len, 0);
+        assert_eq!(len % 8, 0);
     }
-    let secret = &mut tmp.into_bytes()[offset..offset + len];
+    let mut _secret = tmp.into_bytes();
+    let mut secret = &mut _secret[offset..offset + len];
 
     for (i, b) in secret.iter_mut().enumerate() {
         *b = BASE32_ALPHABET
@@ -59,5 +85,6 @@ fn main() {
             .unwrap_or_else(|| panic!("'{}' at index {} is not in Base32", *b as char, i))
             as u8;
     }
-    make_byte_array(secret);
+    secret = pack_base32_in_place(secret);
+    println!("{:?}", secret);
 }
