@@ -72,9 +72,32 @@ fn convert_secret_to_vector(secret: String) -> (Vec<u8>, usize, usize) {
     (secret.into_bytes(), offset, len)
 }
 
+// fn hotp(k: &mut [u8], T: u64) -> String {
+//     // eprintln!("{:?}{}",K,T);
+//     return String::new();
+// }
+
+fn totp(_k: &mut [u8]) -> Option<String> {
+    use std::time::SystemTime;
+
+    let x = 30u64;
+    let t0 = 0u64;
+    let current_time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let t = (current_time - t0) / x;
+
+    dbg!(t);
+
+    // return hotp(k, t);
+    return None;
+}
+
 fn main() {
     let _secret = read_secret_from_file(".2fa");
-    eprintln!("Secret Received: {}", _secret);
+    dbg!(&_secret);
 
     let (mut _secret, offset, len) = convert_secret_to_vector(_secret);
     let mut secret = &mut _secret[offset..offset + len];
@@ -86,7 +109,7 @@ fn main() {
             .unwrap_or_else(|| panic!("'{}' at index {} is not in Base32", *b as char, i))
             as u8;
     }
-    eprintln!("Base32 Decoded:  {:?}", secret);
     secret = pack_base32_in_place(secret);
-    eprintln!("Vec Bit-Packed:  {:?}", secret);
+
+    println!("{}", totp(secret).unwrap_or("None".to_string()));
 }
