@@ -40,7 +40,7 @@ fn pack_base32_in_place(arr: &mut [u8]) -> &mut [u8] {
         }
     }
 
-    &mut arr[0..idx]
+    &mut (*arr)[0..idx]
 }
 
 fn read_secret_from_file(path: &str) -> String {
@@ -61,21 +61,22 @@ fn read_secret_from_file(path: &str) -> String {
     secret
 }
 
+fn convert_secret_to_vector(secret: String) -> (Vec<u8>, usize, usize) {
+    let trimmed = secret.trim();
+    assert_ne!(trimmed.len(), 0, "String cannot be empty");
+    assert_eq!(trimmed.len() % 8, 0);
+
+    let offset = trimmed.as_ptr() as usize - secret.as_ptr() as usize;
+    let len = trimmed.len();
+
+    (secret.into_bytes(), offset, len)
+}
+
 fn main() {
-    let tmp = read_secret_from_file(".2fa");
-    let (offset, len): (usize, usize);
-    {
-        let _tmp = tmp.trim();
-        offset = _tmp.as_ptr() as usize - tmp.as_ptr() as usize;
-        len = _tmp.len();
-        println!(
-            "Received Secret: {}, Offset: {}, Len: {}",
-            _tmp, offset, len
-        );
-        assert_ne!(len, 0);
-        assert_eq!(len % 8, 0);
-    }
-    let mut _secret = tmp.into_bytes();
+    let _secret = read_secret_from_file(".2fa");
+    eprintln!("Secret Received: {}", _secret);
+
+    let (mut _secret, offset, len) = convert_secret_to_vector(_secret);
     let mut secret = &mut _secret[offset..offset + len];
 
     for (i, b) in secret.iter_mut().enumerate() {
@@ -85,6 +86,7 @@ fn main() {
             .unwrap_or_else(|| panic!("'{}' at index {} is not in Base32", *b as char, i))
             as u8;
     }
+    eprintln!("Base32 Decoded:  {:?}", secret);
     secret = pack_base32_in_place(secret);
-    println!("{:?}", secret);
+    eprintln!("Vec Bit-Packed:  {:?}", secret);
 }
