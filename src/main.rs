@@ -1,25 +1,6 @@
 const MAX_SECRET_LENGTH: usize = 32;
 const BASE32_ALPHABET: [u8; 32] = make_base32_alphabet();
 
-fn main() {
-    let _secret = read_secret_from_file(".2fa");
-    dbg!(&_secret);
-
-    let (mut _secret, offset, len) = convert_secret_to_vector(_secret);
-    let mut secret = &mut _secret[offset..offset + len];
-
-    for (i, b) in secret.iter_mut().enumerate() {
-        *b = BASE32_ALPHABET
-            .iter()
-            .position(|&x| x == *b)
-            .unwrap_or_else(|| panic!("'{}' at index {} is not in Base32", *b as char, i))
-            as u8;
-    }
-    secret = pack_base32_in_place(secret);
-
-    println!("{}", totp(secret).unwrap_or(0));
-}
-
 const fn make_base32_alphabet() -> [u8; 32] {
     let mut arr = [0u8; 32];
     let mut i = 0;
@@ -35,7 +16,33 @@ const fn make_base32_alphabet() -> [u8; 32] {
     return arr;
 }
 
-fn pack_base32_in_place(arr: &mut [u8]) -> &mut [u8] {
+fn main() {
+    let mut path = std::env::home_dir().unwrap();
+    path.push(".r2fa");
+    let path = path.to_str().unwrap();
+
+    let _secret = read_secret_from_file(path);
+
+    let mut secret = convert_secret_to_vector(_secret);
+
+    decode_base32(&mut secret);
+
+    pack_base32_in_place(&mut secret);
+
+    println!("{}", totp(secret));
+}
+
+fn decode_base32(secret: &mut Vec<u8>) {
+    for (i, b) in secret.iter_mut().enumerate() {
+        *b = BASE32_ALPHABET
+            .iter()
+            .position(|&x| x == *b)
+            .unwrap_or_else(|| panic!("'{}' at index {} is not in Base32", *b as char, i))
+            as u8;
+    }
+}
+
+fn pack_base32_in_place(arr: &mut Vec<u8>) {
     const BASE32_SIZE: u8 = 5;
     const BYTE_SIZE: u8 = 8;
 
@@ -53,13 +60,13 @@ fn pack_base32_in_place(arr: &mut [u8]) -> &mut [u8] {
         while bits_left >= BYTE_SIZE {
             let byte: u8 = (byte_accum >> (bits_left - BYTE_SIZE)) as u8;
             // println!("=> {:08b} ", byte);
-            (*arr)[idx] = byte;
+            arr[idx] = byte;
             idx += 1;
             bits_left -= BYTE_SIZE;
         }
     }
 
-    &mut (*arr)[0..idx]
+    arr.truncate(idx);
 }
 
 fn read_secret_from_file(path: &str) -> String {
@@ -80,7 +87,7 @@ fn read_secret_from_file(path: &str) -> String {
     secret
 }
 
-fn convert_secret_to_vector(secret: String) -> (Vec<u8>, usize, usize) {
+fn convert_secret_to_vector(secret: String) -> Vec<u8> {
     let trimmed = secret.trim();
     assert_ne!(trimmed.len(), 0, "String cannot be empty");
     assert_eq!(trimmed.len() % 8, 0);
@@ -88,7 +95,17 @@ fn convert_secret_to_vector(secret: String) -> (Vec<u8>, usize, usize) {
     let offset = trimmed.as_ptr() as usize - secret.as_ptr() as usize;
     let len = trimmed.len();
 
-    (secret.into_bytes(), offset, len)
+    let mut internal_vec = secret.into_bytes();
+
+    if offset != 0 {
+        for i in 0..len {
+            internal_vec[i] = internal_vec[offset + i];
+        }
+    }
+
+    internal_vec.truncate(len);
+
+    internal_vec
 }
 
 mod hmac_util {
@@ -163,7 +180,7 @@ fn hotp(k: Vec<u8>, c: [u8; 8]) -> u64 {
     trcate(hmac_sha1(k, c))
 }
 
-fn totp(k: &mut [u8]) -> Option<u64> {
+fn totp(k: Vec<u8>) -> u64 {
     use std::time::SystemTime;
 
     let x = 30u64;
@@ -175,11 +192,7 @@ fn totp(k: &mut [u8]) -> Option<u64> {
 
     let t = (current_time - t0) / x;
 
-    dbg!(t);
-
-    let new_vec = k.to_vec();
-
-    Some(hotp(new_vec, t.to_be_bytes()))
+    hotp(k, t.to_be_bytes())
 }
 
 #[cfg(test)]
