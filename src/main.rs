@@ -17,7 +17,7 @@ fn main() {
     }
     secret = pack_base32_in_place(secret);
 
-    println!("{}", totp(secret).unwrap_or("None".to_string()));
+    println!("{}", totp(secret).unwrap_or(0));
 }
 
 const fn make_base32_alphabet() -> [u8; 32] {
@@ -145,25 +145,25 @@ fn hmac_sha1(k: Vec<u8>, c: [u8; 8]) -> [u8; 20] {
     return outer_hash;
 }
 
-fn trcate(byte_arr: [u8; 20]) {
-    assert_eq!(byte_arr.len(), 20);
-}
+fn trcate(byte_arr: [u8; 20]) -> u64 {
+    const MODULO: u64 = 1_000_000;
 
-fn hotp(k: Vec<u8>, c: [u8; 8]) {
-    trcate(hmac_sha1(k, c));
-}
-
-fn be(n: u64) -> [u8; 8] {
-    let mut arr = [0u8; 8];
-
-    for i in 0..=7usize {
-        arr[i] = ((n >> (i * 8)) & 0xFF) as u8;
+    let offset: usize = (byte_arr[19] & 0xF) as usize;
+    let p = &byte_arr[offset..=offset + 3];
+    let mut ret = (p[0] & 0x7F) as u64;
+    for i in 1..=3 {
+        ret <<= 8;
+        ret |= p[i] as u64;
     }
 
-    return arr;
+    ret % MODULO
 }
 
-fn totp(k: &mut [u8]) -> Option<String> {
+fn hotp(k: Vec<u8>, c: [u8; 8]) -> u64 {
+    trcate(hmac_sha1(k, c))
+}
+
+fn totp(k: &mut [u8]) -> Option<u64> {
     use std::time::SystemTime;
 
     let x = 30u64;
@@ -179,27 +179,7 @@ fn totp(k: &mut [u8]) -> Option<String> {
 
     let new_vec = k.to_vec();
 
-    hotp(new_vec, be(t));
-    return None;
-}
-
-#[cfg(test)]
-mod basic_tests {
-    use super::*;
-
-    #[test]
-    fn test_be_for_vals() {
-        for i in (0..=56).step_by(8) {
-            assert_eq!(
-                {
-                    let mut t = be(1 << (63 - i));
-                    t.reverse();
-                    t
-                },
-                be(1 << (7 + i))
-            );
-        }
-    }
+    Some(hotp(new_vec, t.to_be_bytes()))
 }
 
 #[cfg(test)]
