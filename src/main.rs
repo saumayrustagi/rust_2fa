@@ -29,7 +29,9 @@ fn main() {
 
     pack_base32_in_place(&mut secret);
 
-    println!("{}", totp(secret));
+    let (code, remaining) = totp(secret);
+
+    println!("{}: {}", remaining, code);
 }
 
 fn decode_base32(secret: &mut Vec<u8>) {
@@ -180,19 +182,18 @@ fn hotp(k: Vec<u8>, c: [u8; 8]) -> u64 {
     trcate(hmac_sha1(k, c))
 }
 
-fn totp(k: Vec<u8>) -> u64 {
+fn totp(k: Vec<u8>) -> (u64, u64) {
     use std::time::SystemTime;
 
     let x = 30u64;
-    let t0 = 0u64;
     let current_time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
 
-    let t = (current_time - t0) / x;
+    let (t, r) = (current_time / x, current_time % x);
 
-    hotp(k, t.to_be_bytes())
+    (hotp(k, t.to_be_bytes()), r)
 }
 
 #[cfg(test)]
