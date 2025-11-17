@@ -191,9 +191,9 @@ fn totp(k: Vec<u8>) -> (u64, u64) {
         .unwrap()
         .as_secs();
 
-    let (t, r) = (current_time / x, current_time % x);
+    let (t, elapsed) = (current_time / x, current_time % x);
 
-    (hotp(k, t.to_be_bytes()), r)
+    (hotp(k, t.to_be_bytes()), x - elapsed)
 }
 
 #[cfg(test)]
