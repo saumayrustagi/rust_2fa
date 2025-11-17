@@ -93,19 +93,20 @@ fn convert_secret_to_vector(secret: String) -> (Vec<u8>, usize, usize) {
 
 mod hmac_util {
     #[inline]
-    pub fn pad_vec_with_zeroes(mut v: Vec<u8>, ideal_size: usize) -> Vec<u8> {
+    pub fn pad_vec_with_zeroes(v: &mut Vec<u8>, ideal_size: usize) {
         if ideal_size < v.len() {
             let tmp = compute_sha1(&v);
             v.copy_from_slice(&tmp);
             v.truncate(tmp.len());
         }
         v.resize(ideal_size, 0u8);
-        v
     }
 
     #[inline]
-    pub fn xor_slice_with_mask(v: &[u8], mask: u8) -> Vec<u8> {
-        v.iter().map(|&x| x ^ mask).collect()
+    pub fn xor_vec_with_mask(v: &mut Vec<u8>, mask: u8) {
+        for b in v.iter_mut() {
+            *b ^= mask;
+        }
     }
 
     #[inline]
@@ -119,27 +120,27 @@ mod hmac_util {
 
 fn hmac_sha1(k: Vec<u8>, c: [u8; 8]) -> [u8; 20] {
     use hmac_util as util;
-    let dbg = format!("[{}:{}:{}] ", file!(), line!(), column!());
 
     const B: usize = 64;
 
     const IPAD: u8 = 0x36;
     const OPAD: u8 = 0x5C;
 
-    let k_dash = util::pad_vec_with_zeroes(k, B);
+    let mut k_dash = k;
+    util::pad_vec_with_zeroes(&mut k_dash, B);
 
-    let mut k_xor_ipad = util::xor_slice_with_mask(&k_dash, IPAD);
-    let mut k_xor_opad = util::xor_slice_with_mask(&k_dash, OPAD);
+    // inner_hash = sha1 (k' ^ IPAD || c)
+    let mut k_xor_i = k_dash;
+    util::xor_vec_with_mask(&mut k_xor_i, IPAD);
+    k_xor_i.extend_from_slice(&c);
+    let inner_hash = util::compute_sha1(&k_xor_i);
 
-    k_xor_ipad.extend_from_slice(&c);
-
-    let inner_hash = util::compute_sha1(&k_xor_ipad);
-
+    // outer hash = sha1 (k' ^ OPAD || inner_hash)
+    let mut k_xor_opad = k_xor_i;
+    k_xor_opad.truncate(B);
+    util::xor_vec_with_mask(&mut k_xor_opad, IPAD ^ OPAD);
     k_xor_opad.extend_from_slice(&inner_hash);
-
     let outer_hash = util::compute_sha1(&k_xor_opad);
-
-    eprintln!("{}outer_hash = {:?}", dbg, outer_hash);
 
     return outer_hash;
 }
@@ -207,15 +208,13 @@ mod hmac_sha1_tests {
 
     fn reference_hmac(key: &[u8], msg: &[u8; 8]) -> [u8; 20] {
         use hmac::digest::{KeyInit, Update};
-        use hmac::{Hmac,Mac};
+        use hmac::{Hmac, Mac};
         use sha1::Sha1;
 
         type HmacSha1Ref = Hmac<Sha1>;
 
-
         let mut mac = <HmacSha1Ref as KeyInit>::new_from_slice(key).unwrap();
         Update::update(&mut mac, msg);
-
 
         let result = mac.finalize().into_bytes();
         let mut out = [0u8; 20];
@@ -233,7 +232,10 @@ mod hmac_sha1_tests {
     fn test_hmac() {
         assert!(compare(vec![0x0b; 20], *b"12345678"));
         assert!(compare(b"Jefe".to_vec(), *b"ABCDEFGH"));
-        assert!(compare(vec![0x55; 37], [0xAA, 0xBB, 0xCC, 0xDD, 1, 2, 3, 4]));
+        assert!(compare(
+            vec![0x55; 37],
+            [0xAA, 0xBB, 0xCC, 0xDD, 1, 2, 3, 4]
+        ));
         assert!(compare(vec![], *b"XXXXXXXX"));
         assert!(compare(vec![0x11; 64], *b"87654321"));
     }
