@@ -31,7 +31,7 @@ fn main() {
 
     let (code, remaining) = totp(secret);
 
-    println!("{}: {}", remaining, code);
+    println!("{}: {:06}", remaining, code);
 }
 
 fn decode_base32(secret: &mut Vec<u8>) {
